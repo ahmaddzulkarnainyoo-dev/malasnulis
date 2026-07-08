@@ -2,14 +2,21 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_gallery_saver/image_gallery_saver.dart';
-import '../services/handwriting_service.dart';
 import '../services/ad_service.dart';
 
 /// Layar untuk menampilkan hasil generate tulisan tangan.
-/// Menerima [paperImagePath] dan [text] dari arguments.
-/// Menampilkan preview hasil, dan tombol download dengan iklan interstitial.
+///
+/// Menerima [imageBytes] dan [text] langsung (dari HomeScreen)
+/// atau dari route arguments (backward compatibility).
 class ResultScreen extends StatefulWidget {
-  const ResultScreen({super.key});
+  final Uint8List? imageBytes;
+  final String? text;
+
+  const ResultScreen({
+    super.key,
+    this.imageBytes,
+    this.text,
+  });
 
   @override
   State<ResultScreen> createState() => _ResultScreenState();
@@ -17,50 +24,48 @@ class ResultScreen extends StatefulWidget {
 
 class _ResultScreenState extends State<ResultScreen> {
   Uint8List? _resultBytes;
-  bool _isGenerating = true;
+  bool _isLoading = true;
   bool _isSaving = false;
   String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
-    _generate();
+
+    // Cek apakah data dari constructor atau dari route arguments
+    if (widget.imageBytes != null) {
+      _resultBytes = widget.imageBytes;
+      _isLoading = false;
+    } else {
+      _loadFromArguments();
+    }
   }
 
-  /// Memulai proses generate tulisan tangan
-  Future<void> _generate() async {
-    setState(() {
-      _isGenerating = true;
-      _errorMessage = null;
-    });
-
+  /// Load data dari route arguments (backward compatibility)
+  Future<void> _loadFromArguments() async {
     try {
-      // Ambil arguments dari navigasi
       final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
       if (args == null) {
         throw Exception('Data tidak ditemukan');
       }
 
-      final String paperImagePath = args['paperImagePath'] as String;
-      final String text = args['text'] as String;
-
-      // Panggil HandwritingService untuk generate
-      final Uint8List result = await HandwritingService.generateHandwriting(
-        text: text,
-        paperImagePath: paperImagePath,
-      );
-
-      if (mounted) {
+      // Cek apakah ada imageBytes langsung
+      final bytes = args['imageBytes'] as Uint8List?;
+      if (bytes != null) {
         setState(() {
-          _resultBytes = result;
-          _isGenerating = false;
+          _resultBytes = bytes;
+          _isLoading = false;
         });
+        return;
       }
+
+      // Fallback: butuh generate ulang (ini seharusnya jarang terjadi)
+      throw Exception('Data gambar tidak lengkap');
     } catch (e) {
-      debugPrint('Error generating handwriting: $e');
+      debugPrint('Error loading result: $e');
       if (mounted) {
         setState(() {
-          _isGenerating = false;
+          _isLoading = false;
           _errorMessage = 'Terjadi kesalahan: ${e.toString()}';
         });
       }
@@ -160,14 +165,14 @@ class _ResultScreenState extends State<ResultScreen> {
 
   Widget _buildBody() {
     // State: Loading
-    if (_isGenerating) {
+    if (_isLoading) {
       return const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             CircularProgressIndicator(),
             SizedBox(height: 16),
-            Text('Memproses tulisan...'),
+            Text('Memproses...'),
           ],
         ),
       );
@@ -190,7 +195,7 @@ class _ResultScreenState extends State<ResultScreen> {
               ),
               const SizedBox(height: 24),
               FilledButton.icon(
-                onPressed: _generate,
+                onPressed: _loadFromArguments,
                 icon: const Icon(Icons.refresh),
                 label: const Text('Coba Lagi'),
               ),

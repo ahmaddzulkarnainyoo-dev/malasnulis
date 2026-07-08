@@ -45,7 +45,7 @@ class _RegisterDigitalScreenState extends State<RegisterDigitalScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Daftar Huruf Digital'),
+        title: const Text('Daftar Huruf Digital'),
         backgroundColor: Theme.of(context).colorScheme.primaryContainer,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),

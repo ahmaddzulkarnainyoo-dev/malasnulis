@@ -3,73 +3,92 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
+import '../widgets/paper_templates.dart';
 
-/// Service inti untuk generate tulisan tangan di atas foto kertas.
+/// Service inti untuk generate tulisan tangan di atas background (foto/template).
 /// Semua proses berjalan 100% di device (offline-first).
 class HandwritingService {
-  /// Generate tulisan tangan [text] di atas foto [paperImagePath].
-  /// Mengembalikan [Uint8List] berisi PNG hasil final.
+  /// Generate tulisan tangan [text] dengan berbagai opsi.
   ///
-  /// Proses:
-  /// 1. Load & resize foto kertas (max 1500px) untuk cegah OOM
-  /// 2. Load huruf A-Z dari folder documents/letters/
-  /// 3. Skala proporsional huruf (10% dari tinggi kertas)
-  /// 4. Word-wrap & layouting dengan efek natural (random rotasi, offset, spacing)
-  /// 5. Composite ke foto kertas
-  /// 6. Return sebagai PNG bytes
-  static Future<Uint8List> generateHandwriting({
+  /// Parameter:
+  /// - [text]: teks yang akan ditulis tangan.
+  /// - [fontSource]: 'digital' atau 'scan' (sumber huruf).
+  /// - [backgroundSource]: 'scan' (foto) atau 'polos'/'bergaris'/'kotak'/'kuning'.
+  /// - [scannedImageBytes]: bytes foto jika backgroundSource == 'scan'.
+  ///
+  /// Mengembalikan [Uint8List] berisi PNG hasil final.
+  Future<Uint8List> generateHandwriting({
     required String text,
-    required String paperImagePath,
+    required String fontSource,
+    required String backgroundSource,
+    Uint8List? scannedImageBytes,
   }) async {
     // ============================================================
-    // 1. Load & Resize Foto Kertas (Cegah OOM)
+    // 1. Tentukan Background
     // ============================================================
-    img.Image paper = img.decodeImage(
-      await File(paperImagePath).readAsBytes(),
-    )!;
+    img.Image paper;
 
-    // Jika lebar > 1500px, resize ke 1500px
-    if (paper.width > 1500) {
-      paper = img.copyResize(paper,
-          width: 1500, interpolation: img.Interpolation.cubic);
+    if (backgroundSource == 'scan') {
+      // Pakai foto yang di-scan user
+      if (scannedImageBytes == null) {
+        throw Exception('scannedImageBytes wajib diisi jika backgroundSource = scan');
+      }
+      paper = img.decodeImage(scannedImageBytes)!;
+
+      // Jika lebar > 1500px, resize ke 1500px untuk cegah OOM
+      if (paper.width > 1500) {
+        paper = img.copyResize(paper,
+            width: 1500, interpolation: img.Interpolation.cubic);
+      }
+    } else {
+      // Pakai template digital dari sistem
+      paper = PaperTemplates.getPaperTemplate(backgroundSource);
     }
 
     final int paperWidth = paper.width;
     final int paperHeight = paper.height;
 
     // ============================================================
-    // 2. Load Huruf yang Sudah Didaftarkan (A-Z)
+    // 2. Load Huruf dari Folder Sesuai fontSource
     // ============================================================
     final Map<String, img.Image> letterMap = {};
-    final dir = await getApplicationDocumentsDirectory();
-    final lettersDir = Directory('${dir.path}/letters');
 
-    if (!await lettersDir.exists()) {
-      throw Exception('Folder letters tidak ditemukan. Silakan registrasi huruf dulu.');
-    }
+    if (fontSource == 'digital' || fontSource == 'scan') {
+      final dir = await getApplicationDocumentsDirectory();
+      final lettersDir = Directory('${dir.path}/malasnulis/$fontSource');
 
-    final List<FileSystemEntity> files = await lettersDir.list().toList();
-    for (final entity in files) {
-      if (entity is File && entity.path.endsWith('.png')) {
-        try {
-          // Ambil nama file tanpa ekstensi (contoh: "A", "B", "C")
-          final String letterName = entity.uri.pathSegments.last
-              .replaceAll('.png', '')
-              .toUpperCase();
+      if (!await lettersDir.exists()) {
+        throw Exception(
+          'Folder $fontSource tidak ditemukan. '
+          'Silakan registrasi huruf $fontSource dulu.',
+        );
+      }
 
-          final img.Image letterImage = img.decodeImage(
-            await entity.readAsBytes(),
-          )!;
+      final List<FileSystemEntity> files = await lettersDir.list().toList();
+      for (final entity in files) {
+        if (entity is File && entity.path.endsWith('.png')) {
+          try {
+            // Ambil nama file tanpa ekstensi
+            final String letterName = entity.uri.pathSegments.last
+                .replaceAll('.png', '');
 
-          letterMap[letterName] = letterImage;
-        } catch (e) {
-          debugPrint('Gagal load huruf: ${entity.path} - $e');
+            final img.Image letterImage = img.decodeImage(
+              await entity.readAsBytes(),
+            )!;
+
+            letterMap[letterName] = letterImage;
+          } catch (e) {
+            debugPrint('Gagal load huruf: ${entity.path} - $e');
+          }
         }
       }
     }
 
     if (letterMap.isEmpty) {
-      throw Exception('Tidak ada huruf yang ditemukan. Silakan registrasi huruf dulu.');
+      throw Exception(
+        'Tidak ada huruf yang ditemukan di folder $fontSource. '
+        'Silakan registrasi huruf dulu.',
+      );
     }
 
     // ============================================================
@@ -79,8 +98,8 @@ class HandwritingService {
     final int targetHeight = (paperHeight * 0.10).round();
     final int lineHeight = (targetHeight * 1.5).round(); // Jarak antar baris
 
-    // Ambil huruf 'A' sebagai acuan skala
-    final img.Image referenceLetter = letterMap['A']!;
+    // Ambil huruf pertama sebagai acuan skala (fallback jika 'A' tidak ada)
+    final img.Image referenceLetter = letterMap.values.first;
     final double scaleFactor = targetHeight / referenceLetter.height.toDouble();
 
     // Resize SEMUA huruf dalam letterMap dengan skala yang sama
@@ -131,9 +150,8 @@ class HandwritingService {
         continue;
       }
 
-      // Ambil huruf dari map (fallback ke kapital jika huruf kecil tidak ada)
-      final String letterKey = char.toUpperCase();
-      img.Image? letter = scaledLetters[letterKey];
+      // Coba ambil huruf persis (case-sensitive), fallback ke uppercase
+      img.Image? letter = scaledLetters[char] ?? scaledLetters[char.toUpperCase()];
 
       // Jika huruf tidak ditemukan, skip
       if (letter == null) {
@@ -162,7 +180,7 @@ class HandwritingService {
         angle: angle,
       );
 
-      // Composite ke foto kertas
+      // Composite ke background
       img.compositeImage(
         paper,
         rotatedLetter,
@@ -181,7 +199,7 @@ class HandwritingService {
     final Uint8List result = Uint8List.fromList(img.encodePng(paper));
 
     // Hapus paper dari memory untuk membantu GC
-    paper = img.Image(width: 1, height: 1); // Ganti dengan gambar dummy kecil
+    paper = img.Image(width: 1, height: 1);
 
     return result;
   }

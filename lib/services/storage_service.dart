@@ -2,8 +2,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
-/// Service untuk menyimpan dan memuat file PNG huruf digital.
-/// Semua huruf disimpan di folder: Documents/malasnulis/digital/
+/// Service untuk menyimpan dan memuat file PNG huruf digital/scan.
+/// Semua huruf disimpan di folder: Documents/malasnulis/{folder}/
 class StorageService {
   static final StorageService _instance = StorageService._internal();
   factory StorageService() => _instance;
@@ -19,23 +19,25 @@ class StorageService {
     return dir;
   }
 
-  /// Mendapatkan direktori untuk huruf digital: Documents/malasnulis/digital/
-  Future<Directory> getDigitalDirectory() async {
+  /// Mendapatkan direktori untuk folder tertentu (digital/ scan/ dll).
+  /// Jika [folder] tidak disediakan, default ke 'digital'.
+  Future<Directory> getFolderDirectory({String folder = 'digital'}) async {
     final appDir = await getAppDirectory();
-    final dir = Directory('${appDir.path}/digital');
+    final dir = Directory('${appDir.path}/$folder');
     if (!await dir.exists()) {
       await dir.create(recursive: true);
     }
     return dir;
   }
 
-  /// Menyimpan PNG huruf digital ke folder digital/.
+  /// Menyimpan PNG huruf ke folder tertentu.
   /// [letter] adalah nama huruf (contoh: "A", "a", "B", "b").
   /// [pngBytes] adalah data PNG dalam bentuk Uint8List.
-  Future<void> saveDigitalLetter(String letter, Uint8List pngBytes) async {
+  /// [folder] adalah subfolder tujuan (default: 'digital').
+  Future<void> saveDigitalLetter(String letter, Uint8List pngBytes, {String folder = 'digital'}) async {
     try {
-      final digitalDir = await getDigitalDirectory();
-      final file = File('${digitalDir.path}/$letter.png');
+      final dir = await getFolderDirectory(folder: folder);
+      final file = File('${dir.path}/$letter.png');
       await file.writeAsBytes(pngBytes);
       debugPrint('Huruf $letter tersimpan di: ${file.path}');
     } catch (e) {
@@ -44,29 +46,28 @@ class StorageService {
     }
   }
 
-  /// Mengecek apakah suatu huruf sudah didaftarkan.
-  /// Mengembalikan true jika file digital/[letter].png ada.
-  Future<bool> isDigitalLetterRegistered(String letter) async {
+  /// Mengecek apakah suatu huruf sudah didaftarkan di folder tertentu.
+  /// Mengembalikan true jika file {folder}/[letter].png ada.
+  Future<bool> isDigitalLetterRegistered(String letter, {String folder = 'digital'}) async {
     try {
-      final digitalDir = await getDigitalDirectory();
-      final file = File('${digitalDir.path}/$letter.png');
+      final dir = await getFolderDirectory(folder: folder);
+      final file = File('${dir.path}/$letter.png');
       return await file.exists();
     } catch (e) {
       return false;
     }
   }
 
-  /// Mendapatkan daftar semua huruf yang sudah didaftarkan (A-Z dan a-z).
-  /// Mengembalikan list nama file tanpa ekstensi, contoh: ["A", "B", ..., "z"].
-  Future<List<String>> getRegisteredDigitalLetters() async {
+  /// Mendapatkan daftar semua huruf yang sudah didaftarkan di folder tertentu.
+  /// Mengembalikan list nama file tanpa ekstensi.
+  Future<List<String>> getRegisteredDigitalLetters({String folder = 'digital'}) async {
     try {
-      final digitalDir = await getDigitalDirectory();
-      final List<FileSystemEntity> files = await digitalDir.list().toList();
+      final dir = await getFolderDirectory(folder: folder);
+      final List<FileSystemEntity> files = await dir.list().toList();
       final List<String> letters = [];
 
       for (final entity in files) {
         if (entity is File && entity.path.endsWith('.png')) {
-          // Ambil nama file tanpa ekstensi .png
           final String fileName = entity.uri.pathSegments.last
               .replaceAll('.png', '');
           letters.add(fileName);
@@ -80,9 +81,25 @@ class StorageService {
     }
   }
 
-  /// Mendapatkan total huruf yang sudah didaftarkan.
-  Future<int> getRegisteredCount() async {
-    final letters = await getRegisteredDigitalLetters();
+  /// Mendapatkan total huruf yang sudah didaftarkan di folder tertentu.
+  Future<int> getRegisteredCount({String folder = 'digital'}) async {
+    final letters = await getRegisteredDigitalLetters(folder: folder);
     return letters.length;
+  }
+
+  /// Memuat bytes PNG huruf dari folder tertentu.
+  /// Mengembalikan null jika file tidak ditemukan.
+  Future<Uint8List?> loadLetterBytes(String letter, {String folder = 'digital'}) async {
+    try {
+      final dir = await getFolderDirectory(folder: folder);
+      final file = File('${dir.path}/$letter.png');
+      if (await file.exists()) {
+        return await file.readAsBytes();
+      }
+      return null;
+    } catch (e) {
+      debugPrint('Gagal load huruf $letter: $e');
+      return null;
+    }
   }
 }

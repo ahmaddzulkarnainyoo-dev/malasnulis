@@ -109,6 +109,19 @@ class QuotaService {
     return prefs.getInt(_keyTodayCount) ?? 0;
   }
 
+  /// Menambah kuota harian (misalnya setelah nonton iklan).
+  /// [amount] adalah jumlah tambahan kuota.
+  Future<void> addQuota(int amount) async {
+    final prefs = await SharedPreferences.getInstance();
+    await _resetIfNewDay(prefs);
+
+    final int todayCount = prefs.getInt(_keyTodayCount) ?? 0;
+    final int newCount = todayCount - amount;
+    // Simpan nilai baru (bisa negatif, berarti sisa kuota bertambah)
+    await prefs.setInt(_keyTodayCount, newCount < 0 ? 0 : newCount);
+    debugPrint('Kuota ditambah $amount. Sisa: ${2 - newCount}');
+  }
+
   /// Reset todayCount ke 0 jika hari sudah berganti.
   Future<void> _resetIfNewDay(SharedPreferences prefs) async {
     final String today = _getTodayDateString();
