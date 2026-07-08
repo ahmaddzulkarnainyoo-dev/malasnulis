@@ -3,34 +3,52 @@ name: Build Malas Nulis APK
 on:
   push:
     branches: [ main ]
-  workflow_dispatch:  # Biar lo bisa build manual dari website GitHub juga
+  workflow_dispatch:
 
 jobs:
   build-android:
     runs-on: ubuntu-latest
     steps:
-      - name: 📥 Checkout kode
+      - name: Checkout kode
         uses: actions/checkout@v4
 
-      - name: ☕ Setup Java
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '17'
 
-      - name: 🦩 Setup Flutter
+      - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.22.0'  # Pakai versi terbaru stable
+          flutter-version: '3.22.0'
           channel: 'stable'
 
-      - name: 📦 Install Dependencies
+      - name: Install Dependencies
         run: flutter pub get
 
-      - name: 📱 Build APK (Release)
-        run: flutter build apk --release --split-per-abi
+      - name: Patch image_gallery_saver for AGP 8+ compatibility
+        run: |
+          PATCH_FILE="$HOME/.pub-cache/hosted/pub.dev/image_gallery_saver-2.0.3/android/build.gradle"
+          if [ -f "$PATCH_FILE" ]; then
+            cp android/image_gallery_saver_patch.gradle "$PATCH_FILE"
+            echo "Patched successfully"
+          else
+            echo "Warning: File not found at $PATCH_FILE, searching..."
+            FOUND=$(find "$HOME/.pub-cache" -path "*/image_gallery_saver*/android/build.gradle" -type f 2>/dev/null | head -1)
+            if [ -n "$FOUND" ]; then
+              cp android/image_gallery_saver_patch.gradle "$FOUND"
+              echo "Patched alternative path: $FOUND"
+            else
+              echo "Could not find image_gallery_saver build.gradle"
+              exit 1
+            fi
+          fi
 
-      - name: 📤 Upload APK sebagai Artifact
+      - name: Build APK (Release)
+        run: flutter build apk --release --split-per-abi --android-skip-build-dependency-validation
+
+      - name: Upload APK sebagai Artifact
         uses: actions/upload-artifact@v4
         with:
           name: MalasNulis-APK

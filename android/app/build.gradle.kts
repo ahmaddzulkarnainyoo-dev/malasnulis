@@ -35,9 +35,8 @@ android {
     }
 }
 
-kotlin {
-    jvmToolchain(17)
-}
+// Kotlin toolchain di-handle otomatis oleh Flutter Gradle Plugin
+// Hapus jvmToolchain untuk menghindari error JDK tidak ditemukan
 
 flutter {
     source = "../.."

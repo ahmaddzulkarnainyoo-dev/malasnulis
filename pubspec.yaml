@@ -20,7 +20,7 @@ dependencies:
   # Local Storage & Izin
   path_provider: ^2.1.0
   permission_handler: ^11.0.1
-  image_gallery_saver: ^2.0.3
+  image_gallery_saver: 2.0.3
   shared_preferences: ^2.2.2
 
   # Iklan (Pakai ID Test)
