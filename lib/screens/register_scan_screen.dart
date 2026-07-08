@@ -485,7 +485,7 @@ class _GridIllustrationPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = Colors.blue.withValues(alpha: 0.3)
+      ..color = Colors.blue.withOpacity(0.3)
       ..strokeWidth = 1;
 
     final double colW = size.width / 13;
@@ -539,7 +539,7 @@ class _GridOverlayPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = Colors.red.withValues(alpha: 0.5)
+      ..color = Colors.red.withOpacity(0.5)
       ..strokeWidth = 2;
 
     final double gridX = left * size.width;
